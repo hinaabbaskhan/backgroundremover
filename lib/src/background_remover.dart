@@ -111,36 +111,48 @@ class FlutterBackgroundRemover {
     final int width = input['width'];
     final SegmentationMask segmentationMask = input['segmentationMask'];
 
+    // Build mask from confidences (alpha channel = foreground probability)
     final maskBytes = Uint8List.fromList(
       segmentationMask.confidences.expand((c) {
-        int alpha = ((1.0 - c) * 255).toInt();
-        return [0, 0, 0, alpha]; // RGBA per pixel
+        int alpha = (c * 255).toInt(); // <-- c (foreground confidence)
+        return [0, 0, 0, alpha]; // RGBA
       }).toList(),
     );
 
-    final maskImage = img.Image.fromBytes(
+    var maskImage = img.Image.fromBytes(
       width: segmentationMask.width,
       height: segmentationMask.height,
       bytes: maskBytes.buffer,
       numChannels: 4, // RGBA
     );
 
-    // Scale mask to original image size
-    img.Image resizedMask =
-        img.copyResize(maskImage, width: width, height: height);
+    // Resize mask to match original image size
+    maskImage = img.copyResize(maskImage, width: width, height: height);
 
-    resizedMask = img.gaussianBlur(resizedMask, radius: 3);
+    // Optional: blur the mask for smooth edges
+    maskImage = img.gaussianBlur(maskImage, radius: 3);
 
-// Apply mask directly to original image
+    // Create output with transparent background
+    final output = img.Image(width: width, height: height, numChannels: 4);
+
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
-        int maskAlpha = resizedMask.getPixel(x, y).a.toInt();
-        if (maskAlpha > 100) {
-          image.setPixel(x, y, img.ColorRgba8(255, 255, 255, 0));
-        }
+        final srcPx = image.getPixel(x, y);
+        final maskAlpha = maskImage.getPixel(x, y).a.toInt();
+
+        output.setPixel(
+          x,
+          y,
+          img.ColorRgba8(
+            srcPx.r.toInt(),
+            srcPx.g.toInt(),
+            srcPx.b.toInt(),
+            maskAlpha, // apply mask as alpha
+          ),
+        );
       }
     }
 
-    return image;
+    return output;
   }
 }
