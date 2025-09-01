@@ -104,7 +104,6 @@ class FlutterBackgroundRemover {
     });
   }
 
-  // Helper method to remove background from an image in a separate isolate
   static Future<img.Image> _removeBackgroundFromImage(
       Map<String, dynamic> input) async {
     final img.Image image = input['image'];
@@ -112,33 +111,31 @@ class FlutterBackgroundRemover {
     final int width = input['width'];
     final SegmentationMask segmentationMask = input['segmentationMask'];
 
-    // Build a grayscale alpha mask image from the segmentation confidences
-    final maskImage = img.Image(
-      width: segmentationMask.width,
-      height: segmentationMask.height,
+    final maskBytes = Uint8List.fromList(
+      segmentationMask.confidences.expand((c) {
+        int alpha = ((1.0 - c) * 255).toInt();
+        return [0, 0, 0, alpha]; // RGBA per pixel
+      }).toList(),
     );
 
-    for (int y = 0; y < segmentationMask.height; y++) {
-      for (int x = 0; x < segmentationMask.width; x++) {
-        final int index = y * segmentationMask.width + x;
-        final double confidence = segmentationMask.confidences[index];
+    final maskImage = img.Image.fromBytes(
+      width: segmentationMask.width,
+      height: segmentationMask.height,
+      bytes: maskBytes.buffer,
+      numChannels: 4, // RGBA
+    );
 
-        // Background confidence = 1 - person confidence
-        final int alpha = ((1.0 - confidence) * 255).toInt();
+    // Scale mask to original image size
+    img.Image resizedMask =
+        img.copyResize(maskImage, width: width, height: height);
 
-        maskImage.setPixel(x, y, img.ColorRgba8(0, 0, 0, alpha));
-      }
-    }
+    resizedMask = img.gaussianBlur(resizedMask, radius: 3);
 
-    // Resize the mask to match the original image size
-    final resizedMask = img.copyResize(maskImage, width: width, height: height);
-
-    // Apply mask to original image
+// Apply mask directly to original image
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
-        final int maskAlpha = resizedMask.getPixel(x, y).a.toInt();
+        int maskAlpha = resizedMask.getPixel(x, y).a.toInt();
         if (maskAlpha > 100) {
-          // If background confidence is high, make pixel transparent
           image.setPixel(x, y, img.ColorRgba8(255, 255, 255, 0));
         }
       }
