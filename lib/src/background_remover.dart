@@ -112,26 +112,38 @@ class FlutterBackgroundRemover {
     final int width = input['width'];
     final SegmentationMask segmentationMask = input['segmentationMask'];
 
-    // Create a new image with the background removed based on the segmentation mask
-    final newImage = img.copyResize(image,
-        width: segmentationMask.width, height: segmentationMask.height);
+    // Build a grayscale alpha mask image from the segmentation confidences
+    final maskImage = img.Image(
+      width: segmentationMask.width,
+      height: segmentationMask.height,
+    );
 
     for (int y = 0; y < segmentationMask.height; y++) {
       for (int x = 0; x < segmentationMask.width; x++) {
         final int index = y * segmentationMask.width + x;
-        final double bgConfidence =
-            ((1.0 - segmentationMask.confidences[index]) * 255)
-                .toInt()
-                .toDouble();
+        final double confidence = segmentationMask.confidences[index];
 
-        // Check if the background confidence is below a threshold (e.g., 100)
-        if (bgConfidence >= 100) {
-          // If not fully transparent, copy the pixel from the original image
-          newImage.setPixel(x, y, img.ColorRgba8(255, 255, 255, 0));
+        // Background confidence = 1 - person confidence
+        final int alpha = ((1.0 - confidence) * 255).toInt();
+
+        maskImage.setPixel(x, y, img.ColorRgba8(0, 0, 0, alpha));
+      }
+    }
+
+    // Resize the mask to match the original image size
+    final resizedMask = img.copyResize(maskImage, width: width, height: height);
+
+    // Apply mask to original image
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        final int maskAlpha = resizedMask.getPixel(x, y).a.toInt();
+        if (maskAlpha > 100) {
+          // If background confidence is high, make pixel transparent
+          image.setPixel(x, y, img.ColorRgba8(255, 255, 255, 0));
         }
       }
     }
 
-    return img.copyResize(newImage, width: width, height: height);
+    return image;
   }
 }
