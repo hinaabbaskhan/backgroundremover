@@ -130,7 +130,7 @@ class FlutterBackgroundRemover {
     maskImage = img.copyResize(maskImage, width: width, height: height);
 
     // Optional: blur the mask for smooth edges
-    maskImage = img.gaussianBlur(maskImage, radius: 3);
+    // maskImage = img.gaussianBlur(maskImage, radius: 3);
 
     // Create output with transparent background
     final output = img.Image(width: width, height: height, numChannels: 4);
